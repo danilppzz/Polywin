@@ -3,7 +3,7 @@ import ctypes
 import socket
 import psutil
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QHBoxLayout, QWidget, QSystemTrayIcon, QMenu
-from PyQt5.QtCore import Qt, QTimer, QTime
+from PyQt5.QtCore import Qt, QTimer, QTime, QPropertyAnimation, pyqtProperty
 from PyQt5.QtGui import QFont, QIcon
 
 class RECT(ctypes.Structure):
@@ -44,6 +44,14 @@ def get_ram_usage():
 
 def get_current_time():
     return QTime.currentTime().toString("hh:mm:ss AP")
+
+def is_fullscreen_window_active():
+    hwnd = ctypes.windll.user32.GetForegroundWindow()
+    rect = RECT()
+    ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    screen_width = ctypes.windll.user32.GetSystemMetrics(0)
+    screen_height = ctypes.windll.user32.GetSystemMetrics(1)
+    return rect.left == 0 and rect.top == 0 and rect.right == screen_width and rect.bottom == screen_height
 
 class CustomBar(QMainWindow):
     def __init__(self, size):
@@ -103,6 +111,13 @@ class CustomBar(QMainWindow):
         self.timer.timeout.connect(self.update_info)
         self.timer.start(1000)
 
+        self.visibility_timer = QTimer(self)
+        self.visibility_timer.timeout.connect(self.check_fullscreen)
+        self.visibility_timer.start(1000)
+
+        self.animation = QPropertyAnimation(self, b"windowOpacity")
+        self.animation.setDuration(500)
+
     def update_info(self):
         for i, label in enumerate(self.findChildren(QLabel)):
             if i < 2:
@@ -112,6 +127,24 @@ class CustomBar(QMainWindow):
                     label.setText(get_ram_usage())
         self.findChildren(QLabel)[2].setText(f"{get_local_ip()}")
         self.findChildren(QLabel)[3].setText(f"{get_current_time()}")
+
+    def check_fullscreen(self):
+        if is_fullscreen_window_active():
+            self.fade_out()
+        else:
+            self.fade_in()
+
+    def fade_out(self):
+        if self.windowOpacity() != 0.0:
+            self.animation.setStartValue(self.windowOpacity())
+            self.animation.setEndValue(0.0)
+            self.animation.start()
+
+    def fade_in(self):
+        if self.windowOpacity() != 1.0:
+            self.animation.setStartValue(self.windowOpacity())
+            self.animation.setEndValue(1.0)
+            self.animation.start()
 
     def exit_application(self):
         restore_work_area()
